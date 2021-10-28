@@ -1,0 +1,5 @@
+{
+    "phpVersion": "7.2",
+    "singleQuote": true,
+    "trailingCommaPHP": true
+}

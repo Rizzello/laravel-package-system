@@ -1,0 +1,49 @@
+{
+    "name": "rizzello/laravel-package-system",
+    "description": "A basic package system for Laravel 6.0 and up",
+    "keywords": [
+        "rizzello",
+        "laravel",
+        "package",
+        "packages"
+    ],
+    "homepage": "https://github.com/Rizzello/laravel-package-system",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Paolo Rizzello",
+            "email": "paolo.rizzello@gmail.com",
+            "homepage": "https://rizzello.dev",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": ">=7.2",
+        "laravel/framework": "6.*"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^4.0|^5.0|^6.0",
+        "phpunit/phpunit": "^8.0|^9.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Rizzello\\LaravelPackageSystem\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Rizzello\\LaravelPackageSystem\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Exin\\LaravelPackageSystem\\PackageSystemServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    }
+}
