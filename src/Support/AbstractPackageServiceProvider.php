@@ -60,7 +60,7 @@ abstract class AbstractPackageServiceProvider extends ServiceProvider
     /**
      * The event handlers mapping.
      *
-     * @var string[]
+     * @var array
      */
     protected $listen = [];
 
@@ -102,20 +102,14 @@ abstract class AbstractPackageServiceProvider extends ServiceProvider
     {
         $options = $this->getPackageOptions();
 
-        if (empty($options['package_name'] ?? null)) {
-            throw new PackageConfigurationException(
-                'Name of the package must be set'
-            );
-        }
-
         if ($options['migrations']) {
             $this->loadMigrationsFrom(
-                $this->packageBasePath . '/database/migrations'
+                "{$this->packageBasePath}/database/migrations"
             );
         }
 
         if ($options['routes_web']) {
-            $this->loadRoutesFrom($this->packageBasePath . '/routes/web.php');
+            $this->loadRoutesFrom("{$this->packageBasePath}/routes/web.php");
         }
 
         if ($options['routes_api']) {
@@ -123,16 +117,41 @@ abstract class AbstractPackageServiceProvider extends ServiceProvider
         }
 
         if ($options['views']) {
-            $this->registerViews(
-                $options['views_name'] ?? $options['package_name']
+            /*
+             * Default package view namespace registration
+             */
+            $viewNamespace = $options['views_name'] ?? $options['package_name'];
+            $this->registerViewNamespace(
+                "{$this->packageBasePath}/resources/views",
+                $viewNamespace
             );
         }
 
-        $this->registerEventListeners();
+        /*
+         * Event listeners registration
+         */
+        foreach ($this->listen as $event => $listeners) {
+            foreach (array_unique($listeners) as $listener) {
+                Event::listen($event, $listener);
+            }
+        }
 
-        $this->registerTranslations();
+        /*
+         * Translation files registration
+         */
+        foreach ($this->translations as $translation) {
+            $this->registerTranslation(
+                "{$this->packageBasePath}/resources/lang",
+                $translation
+            );
+        }
 
-        $this->registerCommands();
+        /*
+         * Console commands registration
+         */
+        if ($this->app->runningInConsole() && !empty($this->commands)) {
+            $this->commands($this->commands);
+        }
     }
 
     /**
@@ -142,6 +161,16 @@ abstract class AbstractPackageServiceProvider extends ServiceProvider
      */
     public function register()
     {
+        if (empty($this->options['package_name'] ?? null)) {
+            throw new PackageConfigurationException(
+                'Name of the package must be set'
+            );
+        }
+
+        foreach ($this->configs as $config) {
+            $this->registerConfig("{$this->packageBasePath}/config", $config);
+        }
+
         foreach ($this->aliases as $alias => $class) {
             $this->registerAlias($alias, $class);
         }
@@ -152,23 +181,11 @@ abstract class AbstractPackageServiceProvider extends ServiceProvider
      *
      * @return string
      */
-    protected function guessPackageBasePath()
+    protected function guessPackageBasePath(): string
     {
         $autoloader = require base_path('/vendor/autoload.php');
         $file = $autoloader->findFile(static::class);
         return dirname($file) . '/..';
-    }
-
-    /**
-     * Add an alias to the loader.
-     *
-     * @param  string  $class
-     * @param  string  $alias
-     * @return void
-     */
-    protected function registerAlias($class, $alias)
-    {
-        AliasLoader::getInstance()->alias($class, $alias);
     }
 
     /**
@@ -184,74 +201,112 @@ abstract class AbstractPackageServiceProvider extends ServiceProvider
     /**
      * Register api routes.
      */
-    public function registerApiRoutes()
+    private function registerApiRoutes()
     {
         Route::group(
             [
                 'prefix' => 'api',
             ],
             function ($router) {
-                require $this->packageBasePath . '/routes/api.php';
+                require "{$this->packageBasePath}/routes/api.php";
             }
         );
     }
 
     /**
-     * Register all views.
+     * Add an alias to the loader.
+     * Should be called in register() method.
      *
-     * @param string $namespace
+     * @param  string  $class
+     * @param  string  $alias
+     * @return void
      */
-    public function registerViews(string $namespace)
+    protected function registerAlias($class, $alias)
     {
-        $this->loadViewsFrom(
-            $this->packageBasePath . '/resources/views',
-            $namespace
-        );
-
-        $this->publishes(
-            [
-                $this->packageBasePath . '/resources/views' => resource_path(
-                    'views/vendor/' . $namespace
-                ),
-            ],
-            'views'
-        );
+        AliasLoader::getInstance()->alias($class, $alias);
     }
 
     /**
-     * Register all event listeners.
+     * Merge the given configuration with the existing configuration.
+     * Register the config file to be published by the publish command if $publish = true.
+     * Should be called in register() method.
+     *
+     * @param string $configFolder
+     * @param string $configName
+     * @param bool $publish
      */
-    public function registerEventListeners()
-    {
-        foreach ($this->listen as $event => $listeners) {
-            foreach (array_unique($listeners) as $listener) {
-                Event::listen($event, $listener);
-            }
-        }
-    }
+    protected function registerConfig(
+        string $configFolder,
+        string $configName,
+        bool $publish = true
+    ) {
+        $configFullPath = "{$configFolder}/{$configName}.php";
 
-    /**
-     * Load all translation files.
-     */
-    public function registerTranslations()
-    {
-        foreach ($this->translations as $translation) {
-            $this->loadTranslationsFrom(
-                $this->packageBasePath . '/resources/languages',
-                $translation
+        $this->mergeConfigFrom($configFullPath, $configName);
+
+        if ($publish) {
+            $this->publishes(
+                [
+                    $configFullPath => config_path($configName . '.php'),
+                ],
+                "{$this->options['package_name']}-configs"
             );
         }
     }
 
     /**
-     * Register all console commands.
+     * Register a translation file namespace.
+     * Register the lang folder to be published by the publish command if $publish = true.
+     * Should be called in boot() method.
+     *
+     * @param string $langFolder
+     * @param string $langNamespace
+     * @param bool $publish
      */
-    public function registerCommands()
-    {
-        if ($this->app->runningInConsole()) {
-            foreach ($this->commands as $command) {
-                $this->commands([$command]);
-            }
+    protected function registerTranslation(
+        string $langFolder,
+        string $langNamespace,
+        bool $publish = true
+    ) {
+        $this->loadTranslationsFrom($langFolder, $langNamespace);
+
+        if ($publish) {
+            $this->publishes(
+                [
+                    $langFolder => resource_path(
+                        "lang/vendor/{$this->options['package_name']}"
+                    ),
+                ],
+                "{$this->options['package_name']}-lang"
+            );
+        }
+    }
+
+    /**
+     * Register a view files namespace.
+     * Register the view folder to be published by the publish command if $publish = true.
+     * Should be called in boot() method.
+     *
+     * @param string $viewFolder
+     * @param string $viewNamespace
+     * @param bool $publish
+     */
+    protected function registerViewNamespace(
+        string $viewFolder,
+        string $viewNamespace,
+        bool $publish = true
+    ) {
+        $this->loadViewsFrom($viewFolder, $viewNamespace);
+
+        if ($publish) {
+            $this->publishes(
+                [
+                    $viewFolder => resource_path(
+                        "views/vendor/{$viewNamespace}"
+                    ),
+                ],
+                "{$this->options['package_name']}-views"
+            );
         }
     }
 }
