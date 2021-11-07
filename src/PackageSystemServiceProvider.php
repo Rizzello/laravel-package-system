@@ -2,6 +2,7 @@
 
 namespace Rizzello\LaravelPackageSystem;
 
+use Rizzello\LaravelPackageSystem\Console\Commands\MakePackageCommand;
 use Rizzello\LaravelPackageSystem\Support\AbstractPackageServiceProvider;
 
 /**
@@ -39,15 +40,19 @@ class PackageSystemServiceProvider extends AbstractPackageServiceProvider
     protected $configs = ['package-system'];
 
     /**
+     * The commands that should be registered.
+     *
+     * @var string[]
+     */
+    protected $commands = [MakePackageCommand::class];
+
+    /**
      * Register services.
      *
      * @return void
      */
     public function register()
     {
-        /*
-         * Parent register() to register functionalities declared in class
-         */
         parent::register();
 
         /*
@@ -57,5 +62,22 @@ class PackageSystemServiceProvider extends AbstractPackageServiceProvider
         foreach ($packages as $package) {
             $this->app->register($package);
         }
+    }
+
+    public function boot()
+    {
+        parent::boot();
+
+        /*
+         * Stubs publishing
+         */
+        $this->publishes(
+            [
+                "{$this->packageBasePath}/resources/stubs" => resource_path(
+                    "stubs/vendor/{$this->options['package_name']}"
+                ),
+            ],
+            "{$this->options['package_name']}-stubs"
+        );
     }
 }
